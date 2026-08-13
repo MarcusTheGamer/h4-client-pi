@@ -16,31 +16,31 @@ def get_hardware_id():
                 return line.split(':')[1].strip()
     return "unknown"
 
+
 HARDWARE_ID = get_hardware_id()
 print(HARDWARE_ID)
 MQTT_BROKER = "192.168.1.138"
 MQTT_PORT = 1883
-MQTT_TOPIC = "sensors/" + HARDWARE_ID + "/readings"
 API_URL = "http://192.168.1.138:3000/api/sensor-data"
+
+CONFIG_TOPIC = f"devices/{HARDWARE_ID}/config"
+ACK_TOPIC = f"devices/{HARDWARE_ID}/ack"
 
 CONNECTED = False
 MAX_TIMEOUT_ATTEMPTS = 10
 TIMEOUTS = 0
-
-client = mqtt.Client()
-
-CONFIG_TOPIC = f"config/{HARDWARE_ID}"
 current_config = {}
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print("Connected, subscribing to config topic")
-        client.subscribe(CONFIG_TOPIC)
+        print("Connected to MQTT broker as", HARDWARE_ID)
+        client.subscribe([(CONFIG_TOPIC, 0), (ACK_TOPIC, 0)])
+        print("Subscribed to config and ack topics")
     else:
-        print("Connect failed, rc =", rc)
+        print("MQTT connect failed, rc =", rc)
 
 def on_disconnect(client, userdata, rc):
-    print("Disconnected, will attempt to reconnect")
+    print("MQTT connection closed")
 
 def on_message(client, userdata, msg):
     global current_config
@@ -50,14 +50,15 @@ def on_message(client, userdata, msg):
             print("Config received:", current_config)
         except json.JSONDecodeError as e:
             print("Bad config payload:", e)
+    elif msg.topic == ACK_TOPIC:
+        print("Ack:", msg.payload.decode())
 
-client = mqtt.Client(client_id=HARDWARE_ID)
-client.on_connect = on_connect
-client.on_disconnect = on_disconnect
-client.on_message = on_message
-
-client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
-client.loop_start()
+mqtt_client = mqtt.Client(client_id=HARDWARE_ID)
+mqtt_client.on_connect = on_connect
+mqtt_client.on_disconnect = on_disconnect
+mqtt_client.on_message = on_message
+mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
+mqtt_client.loop_start()
 
 setRGB(0,0,255)
 setText("Trying to connect to database")
