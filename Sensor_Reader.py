@@ -27,7 +27,37 @@ CONNECTED = False
 MAX_TIMEOUT_ATTEMPTS = 10
 TIMEOUTS = 0
 
-#client = mqtt.Client()
+client = mqtt.Client()
+
+CONFIG_TOPIC = f"config/{HARDWARE_ID}"
+current_config = {}
+
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print("Connected, subscribing to config topic")
+        client.subscribe(CONFIG_TOPIC)
+    else:
+        print("Connect failed, rc =", rc)
+
+def on_disconnect(client, userdata, rc):
+    print("Disconnected, will attempt to reconnect")
+
+def on_message(client, userdata, msg):
+    global current_config
+    if msg.topic == CONFIG_TOPIC:
+        try:
+            current_config = json.loads(msg.payload.decode())
+            print("Config received:", current_config)
+        except json.JSONDecodeError as e:
+            print("Bad config payload:", e)
+
+client = mqtt.Client(client_id=HARDWARE_ID)
+client.on_connect = on_connect
+client.on_disconnect = on_disconnect
+client.on_message = on_message
+
+client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
+client.loop_start()
 
 setRGB(0,0,255)
 setText("Trying to connect to database")
@@ -53,18 +83,6 @@ def post_readings(temp, hum, light, sound):
     except requests.exceptions.RequestException as e:
         print("Error:", e)
         return False
-
-#def on_connect(client, userdata, flags, rc):
-#    print("Connected to broker with result code", rc)
-    
-#def on_disconnect(client, userdata, rc):
-#    print("Disconnected, will attempt to reconnect", rc)
-    
-#client.on_connect = on_connect
-#client.on_disconnect = on_disconnect
-
-#client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
-#client.loop_start()
 
 while True:
     try:
