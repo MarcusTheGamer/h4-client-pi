@@ -23,8 +23,8 @@ MQTT_BROKER = "192.168.1.138"
 MQTT_PORT = 1883
 API_URL = "http://192.168.1.138:3000/api/sensor-data"
 
-CONFIG_TOPIC = f"devices/{HARDWARE_ID}/config"
-ACK_TOPIC = f"devices/{HARDWARE_ID}/ack"
+CONFIG_TOPIC = "devices/" + HARDWARE_ID + "/config"
+ACK_TOPIC = "devices/" + HARDWARE_ID + "/ack"
 
 CONNECTED = False
 MAX_TIMEOUT_ATTEMPTS = 10
@@ -47,7 +47,8 @@ def on_message(client, userdata, msg):
     if msg.topic == CONFIG_TOPIC:
         try:
             current_config = json.loads(msg.payload.decode())
-            print("Config received:", current_config)
+            #print("Config received:", current_config)
+            set_config(current_config)
         except json.JSONDecodeError as e:
             print("Bad config payload:", e)
     elif msg.topic == ACK_TOPIC:
@@ -85,13 +86,33 @@ def post_readings(temp, hum, light, sound):
         print("Error:", e)
         return False
 
-while True:
+SENSORS = []
+INTERVALS = []
+
+def set_config(config):
     try:
-        [ temp, hum ] = dht(th_port,1)       #Get the temperature and Humidity from the DHT sensor
+        SENSORS = payload["sensors"]
+        for sensor in SENSORS:
+            INTERVALS.append(sensor["interval"])
+            print(sensor["interval"])
+    except json.JSONDecodeError as e:
+        print("Error decoding config: " + e)
+
+def read_data():
+    try:
+        [ temp, hum ] = dht(th_port,1)
         light = analogRead(light_port)
         sound = analogRead(sound_port)
-        
+
         data = "t=" + str(temp) + ",h=" + str(hum) + "%\nl=" + str(light) + ",s=" + str(sound)
+        setText(data)
+    except (IOError,TypeError) as e:
+        print("Error", e)
+
+while True:
+    try:
+        
+        
         if post_readings(temp, hum, light, sound) == True:
             if CONNECTED == False:
                 CONNECTED = True
@@ -106,10 +127,9 @@ while True:
                 setText(data)
                 time.sleep(2)
                 setText("HARDWARE ID: \n" + get_hardware_id())
-            
-        #print("temp =", temp, "C humidity =", hum, "%", "Light =", light, "Sound =", sound)
 
-        time.sleep(2)
+        time.sleep(60)
 
     except (IOError,TypeError) as e:
         print("Error", e)
+
