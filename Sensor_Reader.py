@@ -32,7 +32,7 @@ last_sent = {sensor_type: 0 for sensor_type in SENSORS}      # {sensor_type: las
 
 mqtt_connected = False
 last_post_ok = True
-last_readings_text = HARDWARE_ID
+last_readings_text = "HARDWARE ID: \n" + HARDWARE_ID
 display_toggle = 0
 
 READINGS_DURATION = 3   # seconds showing sensor readings while in error state
@@ -150,7 +150,7 @@ while True:
             if cycle_position < READINGS_DURATION:
                 setText(last_readings_text)
             else:
-                setText(HARDWARE_ID)
+                setText("HARDWARE ID: \n" + HARDWARE_ID)
         else:
             setRGB(0, 255, 0)
             setText(last_readings_text)
