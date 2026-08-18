@@ -31,6 +31,23 @@ MAX_TIMEOUT_ATTEMPTS = 10
 TIMEOUTS = 0
 current_config = {}
 
+
+SENSORS = []
+INTERVALS = []
+
+
+
+def set_config(config):
+    try:
+        SENSORS = config["sensors"]
+        for sensor in SENSORS:
+            INTERVALS.append(sensor["interval"])
+            print(sensor["interval"])
+    except json.JSONDecodeError as e:
+        print("Error decoding config: " + e)
+
+
+
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("Connected to MQTT broker as", HARDWARE_ID)
@@ -85,19 +102,7 @@ def post_readings(temp, hum, light, sound):
     except requests.exceptions.RequestException as e:
         print("Error:", e)
         return False
-
-SENSORS = []
-INTERVALS = []
-
-def set_config(config):
-    try:
-        SENSORS = payload["sensors"]
-        for sensor in SENSORS:
-            INTERVALS.append(sensor["interval"])
-            print(sensor["interval"])
-    except json.JSONDecodeError as e:
-        print("Error decoding config: " + e)
-
+    
 def read_data():
     try:
         [ temp, hum ] = dht(th_port,1)
@@ -113,20 +118,20 @@ while True:
     try:
         
         
-        if post_readings(temp, hum, light, sound) == True:
-            if CONNECTED == False:
-                CONNECTED = True
-            TIMEOUTS = 0
-            setRGB(0,255,0)
-            setText(data)
-        else:
-            TIMEOUTS = TIMEOUTS + 1
-            CONNECTED = False
-            if TIMEOUTS >= MAX_TIMEOUT_ATTEMPTS:
-                setRGB(255,0,0)
-                setText(data)
-                time.sleep(2)
-                setText("HARDWARE ID: \n" + get_hardware_id())
+#        if post_readings(temp, hum, light, sound) == True:
+#            if CONNECTED == False:
+#                CONNECTED = True
+#            TIMEOUTS = 0
+#            setRGB(0,255,0)
+#            setText(data)
+#        else:
+#            TIMEOUTS = TIMEOUTS + 1
+#            CONNECTED = False
+#            if TIMEOUTS >= MAX_TIMEOUT_ATTEMPTS:
+#                setRGB(255,0,0)
+#                setText(data)
+#                time.sleep(2)
+#                setText("HARDWARE ID: \n" + get_hardware_id())
 
         time.sleep(60)
 
