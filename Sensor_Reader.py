@@ -31,12 +31,15 @@ last_sent = {}
 
 def set_config(config):
     global SENSORS, last_sent
+    print("Raw config:", config)
+    print("Type of config:", type(config))
     try:
         SENSORS = config["sensors"]
+        print("SENSORS:", SENSORS)
         for sensor in SENSORS:
+            print("sensor item:", sensor, type(sensor))
             if sensor["type"] not in last_sent:
                 last_sent[sensor["type"]] = 0
-            print(sensor["type"], sensor["interval"])
     except KeyError as e:
         print("Bad config, missing key:", e)
 
