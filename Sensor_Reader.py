@@ -26,8 +26,14 @@ CONFIG_TOPIC = "devices/" + HARDWARE_ID + "/config"
 ACK_TOPIC = "devices/" + HARDWARE_ID + "/ack"
 
 current_config = {}
-SENSORS = {'temperature': {'min': None, 'max': None, 'interval': 60}, 'light': {'min': None, 'max': None, 'interval': 130}, 'humidity': {'min': None, 'max': None, 'interval': 100}, 'sound': {'min': None, 'max': None, 'interval': 120}}       # {sensor_type: {"interval": n, "min": n, "max": n}}
-last_sent = {}      # {sensor_type: last_unix_time_sent}
+# Defaults used until a real config arrives over MQTT, or if MQTT never connects at all
+SENSORS = {'temperature': {'min': None, 'max': None, 'interval': 60}, 'light': {'min': None, 'max': None, 'interval': 130}, 'humidity': {'min': None, 'max': None, 'interval': 100}, 'sound': {'min': None, 'max': None, 'interval': 120}}
+last_sent = {sensor_type: 0 for sensor_type in SENSORS}      # {sensor_type: last_unix_time_sent}
+
+mqtt_connected = False
+last_post_ok = True
+last_readings_text = HARDWARE_ID
+display_toggle = 0
 
 def set_config(config):
     global SENSORS, last_sent
@@ -41,14 +47,19 @@ def set_config(config):
         print("Bad config, missing key:", e)
 
 def on_connect(client, userdata, flags, rc):
+    global mqtt_connected
     if rc == 0:
+        mqtt_connected = True
         print("Connected to MQTT broker as", HARDWARE_ID)
         client.subscribe([(CONFIG_TOPIC, 0), (ACK_TOPIC, 0)])
         print("Subscribed to config and ack topics")
     else:
+        mqtt_connected = False
         print("MQTT connect failed, rc =", rc)
 
 def on_disconnect(client, userdata, rc):
+    global mqtt_connected
+    mqtt_connected = False
     print("MQTT connection closed")
 
 def on_message(client, userdata, msg):
@@ -56,7 +67,7 @@ def on_message(client, userdata, msg):
     if msg.topic == CONFIG_TOPIC:
         try:
             if msg.payload.decode() == "{}":
-                break
+                return
             current_config = json.loads(msg.payload.decode())
             set_config(current_config)
         except json.JSONDecodeError as e:
@@ -101,10 +112,6 @@ def read_sensor(sensor_type):
         return {"sound": analogRead(sound_port)}
     return {}
 
-def show_id():
-    time.sleep(10)
-    setText(HARDWARE_ID)
-
 while True:
     try:
         now = time.time()
@@ -124,19 +131,25 @@ while True:
                 last_sent[sensor_type] = now
 
         if readings:
-            setRGB(0, 0, 255)
-            setText("Reading...")
-
-            if post_readings(readings):
-                setRGB(0, 255, 0)
-            else:
-                setRGB(255, 0, 0)
-                show_id()
-
             text = ""
             for r in readings:
                 text += str(r["sensor_type"]).split()[0][:3] + "=" + str(r["value"]) + ","
-            setText(text)
+            last_readings_text = text
+
+            last_post_ok = post_readings(readings)
+
+        error_state = (not mqtt_connected) or (not last_post_ok)
+
+        if error_state:
+            setRGB(255, 0, 0)
+            display_toggle += 1
+            if display_toggle % 3 == 0:
+                setText(HARDWARE_ID)
+            else:
+                setText(last_readings_text)
+        else:
+            setRGB(0, 255, 0)
+            setText(last_readings_text)
 
         time.sleep(1)
 
