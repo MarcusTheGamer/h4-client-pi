@@ -26,17 +26,17 @@ CONFIG_TOPIC = "devices/" + HARDWARE_ID + "/config"
 ACK_TOPIC = "devices/" + HARDWARE_ID + "/ack"
 
 current_config = {}
-# Defaults used until a real config arrives over MQTT, or if MQTT never connects at all
 SENSORS = {'temperature': {'min': None, 'max': None, 'interval': 60}, 'light': {'min': None, 'max': None, 'interval': 130}, 'humidity': {'min': None, 'max': None, 'interval': 100}, 'sound': {'min': None, 'max': None, 'interval': 120}}
 last_sent = {sensor_type: 0 for sensor_type in SENSORS}      # {sensor_type: last_unix_time_sent}
+alert_state = {}      # {sensor_type: "above" | "below" | "normal"}
 
 mqtt_connected = False
 last_post_ok = True
 last_readings_text = "HARDWARE ID: \n" + HARDWARE_ID
 display_toggle = 0
 
-READINGS_DURATION = 3   # seconds showing sensor readings while in error state
-ID_DURATION = 8          # seconds showing hardware ID while in error state
+READINGS_DURATION = 3
+ID_DURATION = 8
 
 def set_config(config):
     global SENSORS, last_sent
@@ -115,23 +115,61 @@ def read_sensor(sensor_type):
         return {"sound": analogRead(sound_port)}
     return {}
 
+def check_threshold(sensor_type, value, settings):
+    global alert_state
+
+    min_v = settings.get("min")
+    max_v = settings.get("max")
+
+    if max_v is not None and value > max_v:
+        new_state = "above"
+    elif min_v is not None and value < min_v:
+        new_state = "below"
+    else:
+        new_state = "normal"
+
+    old_state = alert_state.get(sensor_type, "normal")
+    alert_state[sensor_type] = new_state
+
+    return new_state != old_state
+
 while True:
     try:
         now = time.time()
         readings = []
+        alert_readings = []
         values = {}
 
+        sensors_to_read = set()
         for sensor_type, settings in SENSORS.items():
             interval = settings.get("interval")
-            if interval is None:
+            due = interval is not None and now - last_sent[sensor_type] >= interval
+            monitored = settings.get("min") is not None or settings.get("max") is not None
+            if due or monitored:
+                sensors_to_read.add(sensor_type)
+
+        for sensor_type in sensors_to_read:
+            if sensor_type not in values:
+                values.update(read_sensor(sensor_type))
+
+        for sensor_type, settings in SENSORS.items():
+            if sensor_type not in values:
                 continue
 
-            if now - last_sent[sensor_type] >= interval:
-                if sensor_type not in values:
-                    values.update(read_sensor(sensor_type))
-                if sensor_type in values:
-                    readings.append({"sensor_type": sensor_type, "value": values[sensor_type]})
+            value = values[sensor_type]
+            interval = settings.get("interval")
+
+            if settings.get("min") is not None or settings.get("max") is not None:
+                if check_threshold(sensor_type, value, settings):
+                    alert_readings.append({"sensor_type": sensor_type, "value": value})
+
+            # Interval schedule is untouched by alert posts above
+            if interval is not None and now - last_sent[sensor_type] >= interval:
+                readings.append({"sensor_type": sensor_type, "value": value})
                 last_sent[sensor_type] = now
+
+        if alert_readings:
+            last_post_ok = post_readings(alert_readings)
 
         if readings:
             text = ""
