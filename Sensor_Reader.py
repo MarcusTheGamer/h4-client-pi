@@ -23,7 +23,6 @@ MQTT_PORT = 1883
 API_URL = "http://192.168.1.138:3000/api/sensor-data"
 
 CONFIG_TOPIC = "devices/" + HARDWARE_ID + "/config"
-ACK_TOPIC = "devices/" + HARDWARE_ID + "/ack"
 
 current_config = {}
 SENSORS = {'temperature': {'min': 23.0, 'max': 26.0, 'interval': 900}, 'light': {'min': 10.0, 'max': 200.0, 'interval': 900}, 'humidity': {'min': 45.0, 'max': 55.0, 'interval': 1800}, 'sound': {'min': None, 'max': None, 'interval': 120}}
@@ -162,7 +161,7 @@ while True:
     if readings:
         text = ""
         for r in readings:
-            text += str(r["sensor_type"]).split()[0][:3] + "=" + str(r["value"]) + ","
+            text += str(r["sensor_type"]).split()[0][:2] + "=" + str(r["value"]) + ","
         last_readings_text = text
 
         ok = post_readings(readings)
