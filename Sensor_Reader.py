@@ -5,17 +5,16 @@ from grovepi import *
 import json
 import paho.mqtt.client as mqtt
 
-th_port = 7 # temperature and humidity port 7
-light_port = 0 # light port 0
-sound_port = 1 # sound port 1
+th_port = 7
+light_port = 0
+sound_port = 1
 
 def get_hardware_id():
-    with open ('/proc/cpuinfo', 'r') as f:
+    with open('/proc/cpuinfo', 'r') as f:
         for line in f:
             if line.startswith('Serial'):
                 return line.split(':')[1].strip()
     return "unknown"
-
 
 HARDWARE_ID = get_hardware_id()
 print(HARDWARE_ID)
@@ -26,27 +25,20 @@ API_URL = "http://192.168.1.138:3000/api/sensor-data"
 CONFIG_TOPIC = "devices/" + HARDWARE_ID + "/config"
 ACK_TOPIC = "devices/" + HARDWARE_ID + "/ack"
 
-CONNECTED = False
-MAX_TIMEOUT_ATTEMPTS = 10
-TIMEOUTS = 0
 current_config = {}
-
-
 SENSORS = []
-INTERVALS = []
-
-
+last_sent = {}
 
 def set_config(config):
+    global SENSORS, last_sent
     try:
         SENSORS = config["sensors"]
         for sensor in SENSORS:
-            INTERVALS.append(sensor["interval"])
-            print(sensor["interval"])
-    except json.JSONDecodeError as e:
-        print("Error decoding config: " + e)
-
-
+            if sensor["type"] not in last_sent:
+                last_sent[sensor["type"]] = 0
+            print(sensor["type"], sensor["interval"])
+    except KeyError as e:
+        print("Bad config, missing key:", e)
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -64,7 +56,6 @@ def on_message(client, userdata, msg):
     if msg.topic == CONFIG_TOPIC:
         try:
             current_config = json.loads(msg.payload.decode())
-            #print("Config received:", current_config)
             set_config(current_config)
         except json.JSONDecodeError as e:
             print("Bad config payload:", e)
@@ -81,19 +72,12 @@ mqtt_client.loop_start()
 setRGB(0,0,255)
 setText("Trying to connect to database")
 
-def post_readings(temp, hum, light, sound):
-    payload = {
-        "readings": [
-            {"sensor_type": "temperature", "value": temp},
-            {"sensor_type": "humidity", "value": hum},
-            {"sensor_type": "light", "value": light}
-        ]
-    }
+def post_readings(readings):
+    payload = {"readings": readings}
     headers = {
         "x-hardware-id": HARDWARE_ID,
         "Content-Type": "application/json"
         }
-    
     try:
         response = requests.post(API_URL, json=payload, headers=headers, timeout=5)
         response.raise_for_status()
@@ -102,39 +86,45 @@ def post_readings(temp, hum, light, sound):
     except requests.exceptions.RequestException as e:
         print("Error:", e)
         return False
-    
-def read_data():
-    try:
-        [ temp, hum ] = dht(th_port,1)
-        light = analogRead(light_port)
-        sound = analogRead(sound_port)
 
-        data = "t=" + str(temp) + ",h=" + str(hum) + "%\nl=" + str(light) + ",s=" + str(sound)
-        setText(data)
-    except (IOError,TypeError) as e:
-        print("Error", e)
+def read_sensor(sensor_type):
+    if sensor_type == "temperature" or sensor_type == "humidity":
+        [temp, hum] = dht(th_port, 1)
+        return {"temperature": temp, "humidity": hum}
+    if sensor_type == "light":
+        return {"light": analogRead(light_port)}
+    return {}
 
 while True:
     try:
-        
-        
-#        if post_readings(temp, hum, light, sound) == True:
-#            if CONNECTED == False:
-#                CONNECTED = True
-#            TIMEOUTS = 0
-#            setRGB(0,255,0)
-#            setText(data)
-#        else:
-#            TIMEOUTS = TIMEOUTS + 1
-#            CONNECTED = False
-#            if TIMEOUTS >= MAX_TIMEOUT_ATTEMPTS:
-#                setRGB(255,0,0)
-#                setText(data)
-#                time.sleep(2)
-#                setText("HARDWARE ID: \n" + get_hardware_id())
+        now = time.time()
+        readings = []
+        values = {}
 
-        time.sleep(60)
+        for sensor in SENSORS:
+            sensor_type = sensor["type"]
+            interval = sensor["interval"]
 
-    except (IOError,TypeError) as e:
+            if now - last_sent[sensor_type] >= interval:
+                if sensor_type not in values:
+                    values.update(read_sensor(sensor_type))
+                readings.append({"sensor_type": sensor_type, "value": values[sensor_type]})
+                last_sent[sensor_type] = now
+
+        if readings:
+            setRGB(0,0,255)
+            setText("Reading...")
+            if post_readings(readings):
+                setRGB(0,255,0)
+            else:
+                setRGB(255,0,0)
+
+            text = ""
+            for r in readings:
+                text += r["sensor_type"] + "=" + str(r["value"]) + "\n"
+            setText(text)
+
+        time.sleep(1)
+
+    except (IOError, TypeError) as e:
         print("Error", e)
-
