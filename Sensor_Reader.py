@@ -82,6 +82,8 @@ def post_readings(readings):
         response = requests.post(API_URL, json=payload, headers=headers, timeout=5)
         response.raise_for_status()
         print("Posted:", response.json())
+        for reading in readings:
+            print(reading)
         return True
     except requests.exceptions.RequestException as e:
         print("Error:", e)
@@ -96,6 +98,10 @@ def read_sensor(sensor_type):
     if sensor_type == "sound":
         return {"sound": analogRead(sound_port)}
     return {}
+
+def show_id():
+    time.sleep(10)
+    setText(HARDWARE_ID)
 
 while True:
     try:
@@ -123,10 +129,11 @@ while True:
                 setRGB(0, 255, 0)
             else:
                 setRGB(255, 0, 0)
+                show_id()
 
             text = ""
             for r in readings:
-                text += r["sensor_type"] + "=" + str(r["value"]) + "\n"
+                text += str(r["sensor_type"]).split()[0][:3] + "=" + str(r["value"]) + ","
             setText(text)
 
         time.sleep(1)
