@@ -5,9 +5,9 @@ from grovepi import *
 import json
 import paho.mqtt.client as mqtt
 
-th_port = 7
-light_port = 0
-sound_port = 1
+th_port = 7 # temperature and humidity port 7
+light_port = 0 # light port 0
+sound_port = 1 # sound port 1
 
 def get_hardware_id():
     with open('/proc/cpuinfo', 'r') as f:
@@ -26,17 +26,19 @@ CONFIG_TOPIC = "devices/" + HARDWARE_ID + "/config"
 ACK_TOPIC = "devices/" + HARDWARE_ID + "/ack"
 
 current_config = {}
-SENSORS = []
-last_sent = {}
+SENSORS = {}       # {sensor_type: {"interval": n, "min": n, "max": n}}
+last_sent = {}      # {sensor_type: last_unix_time_sent}
 
 def set_config(config):
     global SENSORS, last_sent
-    SENSORS = config["sensors"]
-    if isinstance(SENSORS, str):
-        SENSORS = json.loads(SENSORS)
-    for sensor in SENSORS:
-        if sensor["type"] not in last_sent:
-            last_sent[sensor["type"]] = 0
+    try:
+        SENSORS = config["sensors"]
+        for sensor_type in SENSORS:
+            if sensor_type not in last_sent:
+                last_sent[sensor_type] = 0
+        print("Config applied:", SENSORS)
+    except KeyError as e:
+        print("Bad config, missing key:", e)
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -67,7 +69,7 @@ mqtt_client.on_message = on_message
 mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
 mqtt_client.loop_start()
 
-setRGB(0,0,255)
+setRGB(0, 0, 255)
 setText("Trying to connect to database")
 
 def post_readings(readings):
@@ -75,7 +77,7 @@ def post_readings(readings):
     headers = {
         "x-hardware-id": HARDWARE_ID,
         "Content-Type": "application/json"
-        }
+    }
     try:
         response = requests.post(API_URL, json=payload, headers=headers, timeout=5)
         response.raise_for_status()
@@ -91,6 +93,8 @@ def read_sensor(sensor_type):
         return {"temperature": temp, "humidity": hum}
     if sensor_type == "light":
         return {"light": analogRead(light_port)}
+    if sensor_type == "sound":
+        return {"sound": analogRead(sound_port)}
     return {}
 
 while True:
@@ -99,23 +103,26 @@ while True:
         readings = []
         values = {}
 
-        for sensor in SENSORS:
-            sensor_type = sensor["type"]
-            interval = sensor["interval"]
+        for sensor_type, settings in SENSORS.items():
+            interval = settings.get("interval")
+            if interval is None:
+                continue
 
             if now - last_sent[sensor_type] >= interval:
                 if sensor_type not in values:
                     values.update(read_sensor(sensor_type))
-                readings.append({"sensor_type": sensor_type, "value": values[sensor_type]})
+                if sensor_type in values:
+                    readings.append({"sensor_type": sensor_type, "value": values[sensor_type]})
                 last_sent[sensor_type] = now
 
         if readings:
-            setRGB(0,0,255)
+            setRGB(0, 0, 255)
             setText("Reading...")
+
             if post_readings(readings):
-                setRGB(0,255,0)
+                setRGB(0, 255, 0)
             else:
-                setRGB(255,0,0)
+                setRGB(255, 0, 0)
 
             text = ""
             for r in readings:
