@@ -26,7 +26,7 @@ CONFIG_TOPIC = "devices/" + HARDWARE_ID + "/config"
 ACK_TOPIC = "devices/" + HARDWARE_ID + "/ack"
 
 current_config = {}
-SENSORS = {}       # {sensor_type: {"interval": n, "min": n, "max": n}}
+SENSORS = {'temperature': {'min': None, 'max': None, 'interval': 60}, 'light': {'min': None, 'max': None, 'interval': 130}, 'humidity': {'min': None, 'max': None, 'interval': 100}, 'sound': {'min': None, 'max': None, 'interval': 120}}       # {sensor_type: {"interval": n, "min": n, "max": n}}
 last_sent = {}      # {sensor_type: last_unix_time_sent}
 
 def set_config(config):
@@ -55,6 +55,8 @@ def on_message(client, userdata, msg):
     global current_config
     if msg.topic == CONFIG_TOPIC:
         try:
+            if msg.payload.decode() == "{}":
+                break
             current_config = json.loads(msg.payload.decode())
             set_config(current_config)
         except json.JSONDecodeError as e:
