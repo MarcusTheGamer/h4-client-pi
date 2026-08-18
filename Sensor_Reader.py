@@ -35,6 +35,9 @@ last_post_ok = True
 last_readings_text = HARDWARE_ID
 display_toggle = 0
 
+READINGS_DURATION = 3   # seconds showing sensor readings while in error state
+ID_DURATION = 8          # seconds showing hardware ID while in error state
+
 def set_config(config):
     global SENSORS, last_sent
     try:
@@ -143,10 +146,11 @@ while True:
         if error_state:
             setRGB(255, 0, 0)
             display_toggle += 1
-            if display_toggle % 3 == 0:
-                setText(HARDWARE_ID)
-            else:
+            cycle_position = display_toggle % (READINGS_DURATION + ID_DURATION)
+            if cycle_position < READINGS_DURATION:
                 setText(last_readings_text)
+            else:
+                setText(HARDWARE_ID)
         else:
             setRGB(0, 255, 0)
             setText(last_readings_text)
