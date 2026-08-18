@@ -123,6 +123,7 @@ while True:
     readings = []
     alert_readings = []
     values = {}
+    posted_this_tick = False
 
     sensors_to_read = set()
     for sensor_type, settings in SENSORS.items():
@@ -153,7 +154,10 @@ while True:
             last_sent[sensor_type] = now
 
     if alert_readings:
-        last_post_ok = post_readings(alert_readings)
+        ok = post_readings(alert_readings)
+        last_post_ok = ok
+        if ok:
+            posted_this_tick = True
 
     if readings:
         text = ""
@@ -161,18 +165,35 @@ while True:
             text += str(r["sensor_type"]).split()[0][:3] + "=" + str(r["value"]) + ","
         last_readings_text = text
 
-        last_post_ok = post_readings(readings)
+        ok = post_readings(readings)
+        last_post_ok = ok
+        if ok:
+            posted_this_tick = True
 
     error_state = (not mqtt_connected) or (not last_post_ok)
+    alert_active = any(state != "normal" for state in alert_state.values())
 
     if error_state:
-        setRGB(255, 0, 0)
+        if alert_active:
+            if int(now) % 2 == 0:
+                setRGB(255, 0, 0)
+            else:
+                setRGB(255, 255, 0)
+        else:
+            setRGB(255, 0, 0)
+
         display_toggle += 1
         cycle_position = display_toggle % (READINGS_DURATION + ID_DURATION)
         if cycle_position < READINGS_DURATION:
             setText(last_readings_text)
         else:
             setText("HARDWARE ID: \n" + HARDWARE_ID)
+    elif posted_this_tick:
+        setRGB(0, 255, 0)
+        setText(last_readings_text)
+    elif alert_active:
+        setRGB(255, 255, 0)
+        setText(last_readings_text)
     else:
         setRGB(0, 255, 0)
         setText(last_readings_text)
