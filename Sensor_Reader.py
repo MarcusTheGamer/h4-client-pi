@@ -4,11 +4,13 @@ from grove_rgb_lcd import *
 from grovepi import *
 import json
 import paho.mqtt.client as mqtt
+from gpiozero import Button
 
 th_port = 7
 light_port = 0
 sound_port = 1
-button_port = 6
+
+UNIT_BUTTON_PIN = 17  # BCM numbering, physical pin 11. GND on physical pin 9.
 
 def get_hardware_id():
     with open('/proc/cpuinfo', 'r') as f:
@@ -38,43 +40,33 @@ READINGS_DURATION = 3
 ID_DURATION = 8
 
 use_fahrenheit = False
-last_button_state = 0
 
-last_tick = 0
-TICK_INTERVAL = 1
 
+# --- Safe wrappers around I2C calls ---
+# The Grove RGB LCD talks over I2C, which can intermittently fail
+# (OSError: 5, I/O error) especially right after boot or due to bus
+# contention. Wrapping every call means one bad I2C write no longer
+# kills the whole script (which was causing systemd to restart it in
+# a tight loop, which looked like constant MQTT connect/disconnect).
 def safe_setRGB(r, g, b):
-    for attempt in range(2):
-        try:
-            setRGB(r, g, b)
-            return
-        except Exception as e:
-            if attempt == 0:
-                time.sleep(0.05)
-            else:
-                print("setRGB error:", e)
+    try:
+        setRGB(r, g, b)
+    except Exception as e:
+        print("setRGB error:", e)
 
 def safe_setText(text):
-    for attempt in range(2):
-        try:
-            setText(text)
-            return
-        except Exception as e:
-            if attempt == 0:
-                time.sleep(0.05)
-            else:
-                print("setText error:", e)
+    try:
+        setText(text)
+    except Exception as e:
+        print("setText error:", e)
 
-def safe_digitalRead(port, fallback):
-    for attempt in range(2):
-        try:
-            return digitalRead(port)
-        except Exception as e:
-            if attempt == 0:
-                time.sleep(0.05)
-            else:
-                print("Button read error:", e)
-                return fallback
+
+def toggle_unit():
+    global use_fahrenheit
+    use_fahrenheit = not use_fahrenheit
+
+unit_button = Button(UNIT_BUTTON_PIN, pull_up=False)
+unit_button.when_pressed = toggle_unit
 
 
 def set_config(config):
@@ -111,8 +103,7 @@ mqtt_client.on_message = on_message
 mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
 mqtt_client.loop_start()
 
-pinMode(button_port, "INPUT")
-
+# Give the I2C bus a moment to settle after boot before the first write.
 time.sleep(5)
 
 safe_setRGB(0, 0, 255)
@@ -164,17 +155,7 @@ def check_threshold(sensor_type, value, settings):
     return new_state != old_state
 
 while True:
-    button_state = safe_digitalRead(button_port, last_button_state)
-    if button_state == 1 and last_button_state == 0:
-        use_fahrenheit = not use_fahrenheit
-    last_button_state = button_state
-
     now = time.time()
-    if now - last_tick < TICK_INTERVAL:
-        time.sleep(0.3)
-        continue
-    last_tick = now
-
     readings = []
     alert_readings = []
     values = {}
@@ -253,3 +234,5 @@ while True:
         display_text = values_text
 
     safe_setText(display_text)
+
+    time.sleep(1)
