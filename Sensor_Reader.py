@@ -4,10 +4,13 @@ from grove_rgb_lcd import *
 from grovepi import *
 import json
 import paho.mqtt.client as mqtt
+from gpiozero import Button
 
 th_port = 7
 light_port = 0
 sound_port = 1
+
+UNIT_BUTTON_PIN = 17  # BCM numbering, physical pin 11. GND on physical pin 9.
 
 def get_hardware_id():
     with open('/proc/cpuinfo', 'r') as f:
@@ -36,6 +39,8 @@ display_toggle = 0
 READINGS_DURATION = 3
 ID_DURATION = 8
 
+use_fahrenheit = False
+
 
 # --- Safe wrappers around I2C calls ---
 # The Grove RGB LCD talks over I2C, which can intermittently fail
@@ -54,6 +59,14 @@ def safe_setText(text):
         setText(text)
     except Exception as e:
         print("setText error:", e)
+
+
+def toggle_unit():
+    global use_fahrenheit
+    use_fahrenheit = not use_fahrenheit
+
+unit_button = Button(UNIT_BUTTON_PIN, pull_up=False)
+unit_button.when_pressed = toggle_unit
 
 
 def set_config(config):
@@ -95,7 +108,7 @@ time.sleep(5)
 
 safe_setRGB(0, 0, 255)
 safe_setText("Trying to connect to database")
-z
+
 def post_readings(readings):
     payload = {"readings": readings}
     headers = {
@@ -182,7 +195,15 @@ while True:
     values_text = ""
     for sensor_type in SENSORS:
         if sensor_type in values:
-            values_text += str(sensor_type).split()[0][:2] + "=" + str(values[sensor_type]) + ","
+            display_value = values[sensor_type]
+            suffix = ""
+            if sensor_type == "temperature":
+                if use_fahrenheit:
+                    display_value = display_value * 9.0 / 5.0 + 32.0
+                    suffix = "F"
+                else:
+                    suffix = "C"
+            values_text += str(sensor_type).split()[0][:2] + "=" + str(display_value) + suffix + ","
 
     error_state = (not mqtt_connected) or (not last_post_ok)
     alert_active = any(state != "normal" for state in alert_state.values())
