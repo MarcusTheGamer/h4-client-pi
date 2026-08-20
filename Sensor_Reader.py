@@ -36,26 +36,6 @@ display_toggle = 0
 READINGS_DURATION = 3
 ID_DURATION = 8
 
-
-# --- Safe wrappers around I2C calls ---
-# The Grove RGB LCD talks over I2C, which can intermittently fail
-# (OSError: 5, I/O error) especially right after boot or due to bus
-# contention. Wrapping every call means one bad I2C write no longer
-# kills the whole script (which was causing systemd to restart it in
-# a tight loop, which looked like constant MQTT connect/disconnect).
-def safe_setRGB(r, g, b):
-    try:
-        setRGB(r, g, b)
-    except Exception as e:
-        print("setRGB error:", e)
-
-def safe_setText(text):
-    try:
-        setText(text)
-    except Exception as e:
-        print("setText error:", e)
-
-
 def set_config(config):
     global SENSORS, last_sent
     SENSORS = config["sensors"]
@@ -90,11 +70,10 @@ mqtt_client.on_message = on_message
 mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
 mqtt_client.loop_start()
 
-# Give the I2C bus a moment to settle after boot before the first write.
 time.sleep(5)
 
-safe_setRGB(0, 0, 255)
-safe_setText("Trying to connect to database")
+setRGB(0, 0, 255)
+setText("Trying to connect to database")
 
 def post_readings(readings):
     payload = {"readings": readings}
@@ -190,11 +169,11 @@ while True:
     if error_state:
         if alert_active:
             if int(now) % 2 == 0:
-                safe_setRGB(255, 0, 0)
+                setRGB(255, 0, 0)
             else:
-                safe_setRGB(255, 255, 0)
+                setRGB(255, 255, 0)
         else:
-            safe_setRGB(255, 0, 0)
+            setRGB(255, 0, 0)
 
         display_toggle += 1
         cycle_position = display_toggle % (READINGS_DURATION + ID_DURATION)
@@ -203,15 +182,15 @@ while True:
         else:
             display_text = "HARDWARE ID: \n" + HARDWARE_ID
     elif posted_this_tick:
-        safe_setRGB(0, 255, 0)
+        setRGB(0, 255, 0)
         display_text = values_text
     elif alert_active:
-        safe_setRGB(255, 255, 0)
+        setRGB(255, 255, 0)
         display_text = values_text
     else:
-        safe_setRGB(0, 255, 0)
+        setRGB(0, 255, 0)
         display_text = values_text
 
-    safe_setText(display_text)
+    setText(display_text)
 
     time.sleep(1)
