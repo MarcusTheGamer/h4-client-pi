@@ -4,6 +4,16 @@ from grove_rgb_lcd import *
 from grovepi import *
 import json
 import paho.mqtt.client as mqtt
+from gpiozero import Button
+
+unit_fahrenheit = False
+
+def toggle_unit():
+    global unit_fahrenheit
+    unit_fahrenheit = not unit_fahrenheit
+
+unit_button = Button(15, pull_up=False, bounce_time=0.05)
+unit_button.when_pressed = toggle_unit
 
 th_port = 7
 light_port = 0
@@ -161,7 +171,10 @@ while True:
     values_text = ""
     for sensor_type in SENSORS:
         if sensor_type in values:
-            values_text += str(sensor_type).split()[0][:2] + "=" + str(values[sensor_type]) + ","
+            v = values[sensor_type]
+            if sensor_type == "temperature" and unit_fahrenheit:
+                v = round(v * 9 / 5 + 32, 1)
+            values_text += str(sensor_type)[:2] + "=" + str(v) + ","
 
     error_state = (not mqtt_connected) or (not last_post_ok)
     alert_active = any(state != "normal" for state in alert_state.values())
