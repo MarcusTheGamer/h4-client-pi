@@ -8,6 +8,7 @@ import paho.mqtt.client as mqtt
 th_port = 7
 light_port = 0
 sound_port = 1
+button_port = 6
 
 def get_hardware_id():
     with open('/proc/cpuinfo', 'r') as f:
@@ -36,6 +37,12 @@ display_toggle = 0
 READINGS_DURATION = 3
 ID_DURATION = 8
 
+use_fahrenheit = False
+last_button_state = 0
+
+last_tick = 0
+TICK_INTERVAL = 1
+
 
 # --- Safe wrappers around I2C calls ---
 # The Grove RGB LCD talks over I2C, which can intermittently fail
@@ -54,6 +61,13 @@ def safe_setText(text):
         setText(text)
     except Exception as e:
         print("setText error:", e)
+
+def safe_digitalRead(port, fallback):
+    try:
+        return digitalRead(port)
+    except Exception as e:
+        print("Button read error:", e)
+        return fallback
 
 
 def set_config(config):
@@ -89,6 +103,8 @@ mqtt_client.on_disconnect = on_disconnect
 mqtt_client.on_message = on_message
 mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
 mqtt_client.loop_start()
+
+pinMode(button_port, "INPUT")
 
 # Give the I2C bus a moment to settle after boot before the first write.
 time.sleep(5)
@@ -142,7 +158,20 @@ def check_threshold(sensor_type, value, settings):
     return new_state != old_state
 
 while True:
+    # Poll the button every pass so a press is never missed inside the
+    # once-per-second block below. Edge-triggered off the previous state,
+    # so holding it down doesn't keep flipping the unit.
+    button_state = safe_digitalRead(button_port, last_button_state)
+    if button_state == 1 and last_button_state == 0:
+        use_fahrenheit = not use_fahrenheit
+    last_button_state = button_state
+
     now = time.time()
+    if now - last_tick < TICK_INTERVAL:
+        time.sleep(0.05)
+        continue
+    last_tick = now
+
     readings = []
     alert_readings = []
     values = {}
@@ -182,7 +211,15 @@ while True:
     values_text = ""
     for sensor_type in SENSORS:
         if sensor_type in values:
-            values_text += str(sensor_type).split()[0][:2] + "=" + str(values[sensor_type]) + ","
+            display_value = values[sensor_type]
+            suffix = ""
+            if sensor_type == "temperature":
+                if use_fahrenheit:
+                    display_value = display_value * 9.0 / 5.0 + 32.0
+                    suffix = "F"
+                else:
+                    suffix = "C"
+            values_text += str(sensor_type).split()[0][:2] + "=" + str(display_value) + suffix + ","
 
     error_state = (not mqtt_connected) or (not last_post_ok)
     alert_active = any(state != "normal" for state in alert_state.values())
@@ -213,5 +250,3 @@ while True:
         display_text = values_text
 
     safe_setText(display_text)
-
-    time.sleep(1)
