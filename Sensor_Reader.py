@@ -43,31 +43,38 @@ last_button_state = 0
 last_tick = 0
 TICK_INTERVAL = 1
 
-
-# --- Safe wrappers around I2C calls ---
-# The Grove RGB LCD talks over I2C, which can intermittently fail
-# (OSError: 5, I/O error) especially right after boot or due to bus
-# contention. Wrapping every call means one bad I2C write no longer
-# kills the whole script (which was causing systemd to restart it in
-# a tight loop, which looked like constant MQTT connect/disconnect).
 def safe_setRGB(r, g, b):
-    try:
-        setRGB(r, g, b)
-    except Exception as e:
-        print("setRGB error:", e)
+    for attempt in range(2):
+        try:
+            setRGB(r, g, b)
+            return
+        except Exception as e:
+            if attempt == 0:
+                time.sleep(0.05)
+            else:
+                print("setRGB error:", e)
 
 def safe_setText(text):
-    try:
-        setText(text)
-    except Exception as e:
-        print("setText error:", e)
+    for attempt in range(2):
+        try:
+            setText(text)
+            return
+        except Exception as e:
+            if attempt == 0:
+                time.sleep(0.05)
+            else:
+                print("setText error:", e)
 
 def safe_digitalRead(port, fallback):
-    try:
-        return digitalRead(port)
-    except Exception as e:
-        print("Button read error:", e)
-        return fallback
+    for attempt in range(2):
+        try:
+            return digitalRead(port)
+        except Exception as e:
+            if attempt == 0:
+                time.sleep(0.05)
+            else:
+                print("Button read error:", e)
+                return fallback
 
 
 def set_config(config):
@@ -106,7 +113,6 @@ mqtt_client.loop_start()
 
 pinMode(button_port, "INPUT")
 
-# Give the I2C bus a moment to settle after boot before the first write.
 time.sleep(5)
 
 safe_setRGB(0, 0, 255)
@@ -158,9 +164,6 @@ def check_threshold(sensor_type, value, settings):
     return new_state != old_state
 
 while True:
-    # Poll the button every pass so a press is never missed inside the
-    # once-per-second block below. Edge-triggered off the previous state,
-    # so holding it down doesn't keep flipping the unit.
     button_state = safe_digitalRead(button_port, last_button_state)
     if button_state == 1 and last_button_state == 0:
         use_fahrenheit = not use_fahrenheit
@@ -168,7 +171,7 @@ while True:
 
     now = time.time()
     if now - last_tick < TICK_INTERVAL:
-        time.sleep(0.15)
+        time.sleep(0.3)
         continue
     last_tick = now
 
