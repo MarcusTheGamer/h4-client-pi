@@ -168,7 +168,7 @@ while True:
 
     now = time.time()
     if now - last_tick < TICK_INTERVAL:
-        time.sleep(0.05)
+        time.sleep(0.15)
         continue
     last_tick = now
 
