@@ -167,15 +167,13 @@ while True:
         last_post_ok = ok
         if ok:
             posted_this_tick = True
-
+ 
     values_text = ""
     for sensor_type in SENSORS:
         if sensor_type in values:
             v = values[sensor_type]
             if sensor_type == "temperature" and unit_fahrenheit:
-                v = round(v * 9 / 5 + 32, 1) + "F"
-            if sensor_type == "temperature" and not unit_fahrenheit:
-                v = round(v * 9 / 5 + 32, 1) + "C"
+                v = round(v * 9 / 5 + 32, 1)
             values_text += str(sensor_type)[:2] + "=" + str(v) + ","
 
     error_state = (not mqtt_connected) or (not last_post_ok)
